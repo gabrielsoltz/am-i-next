@@ -54,7 +54,7 @@ By default only **verified** secrets are reported (`--results=verified` in
 
 ## Use the path list without this tool
 
-The locations live in [`paths.json`](paths.json) — a language-neutral, schema-
+The locations live in [`paths.json`](paths.json), a language-neutral, schema-
 versioned manifest, so you can feed the list to whatever scanner you already use.
 No API or hosting needed; fetch it straight from the repo:
 
