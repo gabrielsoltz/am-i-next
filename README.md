@@ -7,7 +7,7 @@ one of those packages landed on your system.
 
 ## Why
 
-A wave of 2025 supply-chain attacks (Shai-Hulud, nx "s1ngularity", and many
+A wave of supply-chain attacks (Shai-Hulud, nx "s1ngularity", and many
 copycats) shipped credential harvesters inside popular npm/PyPI packages. Once a
 malicious `postinstall` hook ran on a developer's machine, it scanned the home
 directory for cloud keys, SSH keys, registry tokens, and crypto wallets, then
