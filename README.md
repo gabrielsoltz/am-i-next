@@ -22,11 +22,17 @@ machine** so you can find and rotate exposed secrets *before* an attacker does.
 
 ## Usage
 
+Requires `trufflehog` and `jq` (used to read the path manifest):
+
 ```sh
-# Install trufflehog first (brew install trufflehog, or the official installer)
-./am-i-next.sh                       # scan using config.conf
+brew install trufflehog jq        # macOS; see trufflehog docs for other OSes
+```
+
+```sh
+./am-i-next.sh                       # scan using paths.json + config.conf
 ./am-i-next.sh --verbose             # show each trufflehog invocation
-./am-i-next.sh --config my.conf      # use a custom config
+./am-i-next.sh --config my.conf      # use a custom config (runtime knobs)
+./am-i-next.sh --manifest paths.json # use a custom/fetched path manifest
 ./am-i-next.sh --full-home           # scan all of $HOME in one pass (slower)
 ./am-i-next.sh --report my-scan.log  # override the report path
 ./am-i-next.sh --json-output out.json # also save the raw trufflehog JSON stream
@@ -46,9 +52,32 @@ paths under `$HOME` are skipped as redundant while non-home paths
 By default only **verified** secrets are reported (`--results=verified` in
 `config.conf`). Loosen that flag to surface unverified candidates too.
 
+## Use the path list without this tool
+
+The locations live in [`paths.json`](paths.json) — a language-neutral, schema-
+versioned manifest, so you can feed the list to whatever scanner you already use.
+No API or hosting needed; fetch it straight from the repo:
+
+```sh
+# Grab the raw manifest
+curl -sSL https://raw.githubusercontent.com/gabrielsoltz/am-i-next/main/paths.json -o paths.json
+
+# Example: expand the common paths and scan each with your own trufflehog
+jq -r '.scanLocations.common[].path' paths.json \
+  | sed "s|^~|$HOME|" \
+  | while read -r p; do [ -e "$p" ] && trufflehog filesystem "$p"; done
+
+# Example: just the macOS browser-profile paths
+jq -r '.scanLocations.macos[] | select(.category=="browser") | .path' paths.json
+```
+
+The manifest also carries `excludePatterns` and a `sources` list so you can see
+the provenance of every entry. `am-i-next.sh` reads this same file, so the tool
+and the published list never drift apart.
+
 ## What we scan, and why
 
-The scan locations in [`config.conf`](config.conf) are derived directly from the
+The scan locations in [`paths.json`](paths.json) are derived directly from the
 target lists published in analyses of real attacks. Categories:
 
 | Category | Examples | Seen in |
