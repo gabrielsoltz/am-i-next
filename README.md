@@ -35,9 +35,7 @@ machine** so you can find and rotate exposed secrets *before* an attacker does.
 Every run writes a human-readable report to `scan-<timestamp>.log` (location set
 by `REPORT_DIR` in `config.conf`, or `--report <file>`). It records what was
 scanned, any findings, and a summary. **These reports can contain real secret
-material** — the repo's `.gitignore` excludes `scan-*.log` so they're never
-committed. `--json-output` is separate: it saves the raw machine-readable
-TruffleHog JSON stream for tooling.
+material**.
 
 By default the curated path list in `config.conf` is scanned. `--full-home`
 (or `FULL_HOME_SCAN=true` in the config) instead scans your entire home
