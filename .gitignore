@@ -1,3 +1,7 @@
+# am-i-next scan reports — may contain harvested secret material, never commit
+scan-*.log
+*.scan.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
