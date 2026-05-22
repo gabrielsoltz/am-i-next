@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config.conf"
 JSON_OUTPUT_FILE=""   # optional raw trufflehog JSON (--json-output)
 REPORT_FILE=""        # human-readable report; auto-named if not set via --report
+MANIFEST_CLI=""       # --manifest override; empty = use config/default paths.json
 VERBOSE=false
 FULL_HOME_CLI=""   # tri-state: empty = use config default, true/false = override
 
@@ -89,6 +90,8 @@ Usage: $(basename "$0") [options]
 
 Options:
   --config <path>      Path to config file (default: ${CONFIG_FILE})
+  --manifest <file>    Path to the scan-location manifest (default: paths.json);
+                       point at a fetched copy to scan against the upstream list
   --report <file>      Path for the human-readable report (default:
                        \${REPORT_DIR}/scan-<timestamp>.log — always written)
   --json-output <file> Also write the raw trufflehog JSON stream to a file
@@ -108,6 +111,7 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --config)       CONFIG_FILE="$2"; shift 2 ;;
+            --manifest)     MANIFEST_CLI="$2"; shift 2 ;;
             --report)       REPORT_FILE="$2"; shift 2 ;;
             --json-output)  JSON_OUTPUT_FILE="$2"; shift 2 ;;
             --full-home)    FULL_HOME_CLI=true; shift ;;
@@ -156,8 +160,21 @@ detect_os() {
 # Dependency check
 # ---------------------------------------------------------------------------
 
-check_trufflehog() {
+check_deps() {
     section "Checking dependencies"
+
+    if ! command -v jq &>/dev/null; then
+        err "jq not found — required to read the scan manifest (paths.json)"
+        echo ""
+        echo "  Install options:"
+        case "${OS_TYPE}" in
+            macos) echo "    brew install jq" ;;
+            linux) echo "    apt install jq   # or: dnf install jq" ;;
+            *)     echo "    https://jqlang.github.io/jq/download/" ;;
+        esac
+        echo ""
+        die "Cannot continue without jq."
+    fi
 
     if ! command -v "${TRUFFLEHOG_BIN}" &>/dev/null; then
         err "trufflehog not found (looked for: ${TRUFFLEHOG_BIN})"
@@ -181,8 +198,44 @@ check_trufflehog() {
     fi
 
     TH_VERSION="$("${TRUFFLEHOG_BIN}" --version 2>&1 | head -1 || echo 'unknown')"
+    ok "jq found: $(jq --version)"
     ok "trufflehog found: ${TH_VERSION}"
     ok "Config file: ${CONFIG_FILE}"
+}
+
+# ---------------------------------------------------------------------------
+# Manifest loading — populate scan-location + exclude arrays from paths.json
+# ---------------------------------------------------------------------------
+
+load_manifest() {
+    local manifest="${MANIFEST_FILE:-${SCRIPT_DIR}/paths.json}"
+    [[ -f "${manifest}" ]] || die "Manifest not found: ${manifest}"
+    jq empty "${manifest}" 2>/dev/null || die "Manifest is not valid JSON: ${manifest}"
+
+    COMMON_SCAN_LOCATIONS=()
+    MACOS_SCAN_LOCATIONS=()
+    LINUX_SCAN_LOCATIONS=()
+    EXCLUDE_PATTERNS=()
+
+    # while-read (not mapfile) for bash 3.2 compatibility.
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] && COMMON_SCAN_LOCATIONS+=("${p}")
+    done < <(jq -r '.scanLocations.common[]?.path' "${manifest}")
+
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] && MACOS_SCAN_LOCATIONS+=("${p}")
+    done < <(jq -r '.scanLocations.macos[]?.path' "${manifest}")
+
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] && LINUX_SCAN_LOCATIONS+=("${p}")
+    done < <(jq -r '.scanLocations.linux[]?.path' "${manifest}")
+
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] && EXCLUDE_PATTERNS+=("${p}")
+    done < <(jq -r '.excludePatterns[]?' "${manifest}")
+
+    MANIFEST_FILE="${manifest}"
+    ok "Manifest loaded: ${manifest}"
 }
 
 # ---------------------------------------------------------------------------
@@ -440,7 +493,10 @@ main() {
     parse_args "$@"
     load_config
     detect_os
-    check_trufflehog
+    check_deps
+    # --manifest wins over the config/default path.
+    [[ -n "${MANIFEST_CLI}" ]] && MANIFEST_FILE="${MANIFEST_CLI}"
+    load_manifest
     build_exclude_file
 
     # Resolve full-home mode: CLI flag wins over the config default.
