@@ -87,7 +87,7 @@ target lists published in analyses of real attacks. Categories:
 | SSH keys | `~/.ssh`, `id_rsa` | both |
 | Registry / package tokens | `~/.npmrc`, `~/.pypirc`, `~/.gem`, `~/.cargo` | both |
 | AI CLI tool auth | `~/.claude`, `~/.gemini`, Amazon Q config | s1ngularity (weaponized Claude/Gemini/Q CLIs) |
-| AI conversation history | `~/.claude/projects/**/*.jsonl`, `~/.codex/*.sqlite`, Cursor/Windsurf `state.vscdb`, ChatGPT Desktop | ghosttype (secrets pasted into AI prompts are stored locally in plaintext) |
+| AI conversation history | `~/.claude/projects/**/*.jsonl`, `~/.codex/*.sqlite`, Cursor/Windsurf `state.vscdb`, ChatGPT Desktop | ghosttysecrets pasted into AI prompts are stored locally in plaintext |
 | Crypto wallets | `~/.ethereum`, `~/.electrum`, MetaMask/Exodus/Ledger/Phantom data | both |
 | Browser profiles | Chrome/Brave/Edge/Firefox `Local Storage` + `IndexedDB` | s1ngularity |
 | `.env` / source repos | project roots, git history | both (TruffleHog used by Shai-Hulud) |
