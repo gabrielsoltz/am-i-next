@@ -2,7 +2,7 @@
 
 **What If I'm Next?** is a [TruffleHog](https://github.com/trufflesecurity/trufflehog)
 wrapper that scans the locations recent supply-chain attacks have been harvesting
-from developer machines, so you can see what an attacker would walk away with if
+from infected machines, so you can see what an attacker would walk away with if
 one of those packages landed on your system.
 
 ## Why
@@ -117,13 +117,13 @@ Categories:
 
 ## Sources
 
-**Shai-Hulud (self-replicating npm worm; used TruffleHog to harvest secrets)**
+**Shai-Hulud Attacks**
 - [Datadog Security Labs — Shai-Hulud 2.0 npm worm analysis](https://securitylabs.datadoghq.com/articles/shai-hulud-2.0-npm-worm/)
 - [Microsoft Security Blog — Shai-Hulud 2.0 guidance](https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/)
 - [StepSecurity — Shai-Hulud: 500+ npm packages compromised](https://www.stepsecurity.io/blog/ctrl-tinycolor-and-40-npm-packages-compromised)
 - [Checkmarx — Inside Shai-Hulud's Maw](https://checkmarx.com/zero-post/inside-shai-huluds-maw-how-the-npm-worm-exploits-and-propagates/)
 
-**nx "s1ngularity" (credential + wallet stealer; first weaponized AI CLI tools)**
+**nx "s1ngularity" Attacks**
 - [GitGuardian — The Nx s1ngularity Attack: Inside the Credential Leak](https://blog.gitguardian.com/the-nx-s1ngularity-attack-inside-the-credential-leak/)
 - [StepSecurity — s1ngularity: Nx build system compromised](https://www.stepsecurity.io/blog/supply-chain-security-alert-popular-nx-build-system-package-compromised-with-data-stealing-malware)
 - [Semgrep — NX compromised to steal wallets and credentials](https://semgrep.dev/blog/2025/security-alert-nx-compromised-to-steal-wallets-and-credentials/)
