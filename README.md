@@ -32,6 +32,7 @@ brew install trufflehog jq        # macOS; see trufflehog docs for other OSes
 ./am-i-next.sh --config my.conf      # use a custom config (runtime knobs)
 ./am-i-next.sh --manifest paths.json # use a custom/fetched path manifest
 ./am-i-next.sh --no-verify           # skip secrets verification this time.
+./am-i-next.sh --scan-env            # also scan the current shell's env vars
 ./am-i-next.sh --full-home           # scan all of $HOME in one pass (slower)
 ./am-i-next.sh --report my-scan.log  # override the report path
 ./am-i-next.sh --json-output out.json # also save the raw trufflehog JSON stream
@@ -62,6 +63,25 @@ If you don't want your secrets to be verified, you can disable that behavior:
 ```sh
 ./am-i-next.sh --no-verify    # skip verification this time
 ```
+
+### Environment variables
+
+There's no single file containing your environment variables — they live in
+each process's memory. The persistent places they get *defined* (shell init
+files, launchd plists, systemd unit files) are already in `paths.json` under
+the `shell-init` and `system` categories.
+
+For the **current shell's** live environment (whatever is exported right now,
+including secrets set in this session that never landed in a file), pass
+`--scan-env`:
+
+```sh
+./am-i-next.sh --scan-env
+```
+
+This dumps `env` to a `chmod 600` temp file under `/tmp`, scans it, and removes
+it on exit. It only sees what's exported in the shell you ran the command from
+— it won't reach other shells, other users, or other processes' environments.
 
 ## Use the path list without this tool
 
@@ -107,13 +127,14 @@ Categories:
 | Browser profiles (`browser`) | Chrome / Brave / Edge / Firefox / Arc `Local Storage` + `IndexedDB` |
 | GPG / signing (`gpg`) | `~/.gnupg` |
 | Shell history (`shell-history`) | `~/.bash_history`, `~/.zsh_history`, `~/.fish/fish_history` |
+| Shell init / env exports (`shell-init`) | `~/.profile`, `~/.bashrc`, `~/.bash_profile`, `~/.zshrc`, `~/.zprofile`, `~/.zshenv`, `~/.config/fish/config.fish`, `~/.direnvrc` |
 | Project roots (`project`) | `~/code`, `~/projects`, `~/dev`, `~/workspace`, `~/src` (catches `.env` files, git history) |
 | Temporary files (`temp`) | `/tmp` |
 | Broad config / data (`config-broad`, `data-broad`) | `~/.config`, `~/.local/share` |
 | IDE settings (`ide`) | VS Code, Cursor, Windsurf, JetBrains, GitHub Desktop |
 | App data / preferences (`app`, `app-prefs`, `cache`) | Slack, Homebrew cache, macOS `Library/Preferences`, snap, flatpak |
 | macOS Keychain (`keychain`) | `~/Library/Keychains` (export artifacts, not the encrypted DB itself) |
-| System files (`system`) | `/etc/environment`, `/etc/profile.d` (Linux) |
+| System files (`system`) | `/etc/environment`, `/etc/profile.d` (Linux); `~/Library/LaunchAgents` (macOS, launchd plists often carry `EnvironmentVariables`) |
 
 ## Sources
 

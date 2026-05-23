@@ -22,6 +22,8 @@ MANIFEST_CLI=""       # --manifest override; empty = use config/default paths.js
 VERBOSE=false
 FULL_HOME_CLI=""   # tri-state: empty = use config default, true/false = override
 VERIFY_CLI=""      # tri-state: empty = use config default, true/false = override
+SCAN_ENV=false     # --scan-env: dump current shell's env vars to a temp file
+ENV_TMP=""         # populated at scan time so cleanup() can remove it
 
 FINDINGS=0
 SCANNED=0
@@ -100,6 +102,8 @@ Options:
                        overrides FULL_HOME_SCAN in the config
   --no-verify          Skip verification — show unverified findings only
                        (verification is on by default; see README)
+  --scan-env           Also scan the current shell's environment variables
+                       (dumped to a chmod-600 temp file, removed on exit)
   --verbose            Show each trufflehog invocation
   --help               Show this help
 
@@ -119,6 +123,7 @@ parse_args() {
             --json-output)  JSON_OUTPUT_FILE="$2"; shift 2 ;;
             --full-home)    FULL_HOME_CLI=true; shift ;;
             --no-verify)    VERIFY_CLI=false; shift ;;
+            --scan-env)     SCAN_ENV=true; shift ;;
             --verbose)      VERBOSE=true; shift ;;
             --help|-h)      usage; exit 0 ;;
             *) die "Unknown option: $1. Run with --help for usage." ;;
@@ -268,6 +273,7 @@ build_exclude_file() {
 
 cleanup() {
     [[ -n "${EXCLUDE_FILE:-}" ]] && rm -f "${EXCLUDE_FILE}"
+    [[ -n "${ENV_TMP:-}" ]] && rm -f "${ENV_TMP}"
 }
 
 trap cleanup EXIT
@@ -409,6 +415,7 @@ init_report() {
         echo "OS          : ${OS_TYPE}"
         echo "TruffleHog  : ${TH_VERSION}"
         echo "Full-home   : ${FULL_HOME}"
+        echo "Scan env    : ${SCAN_ENV}"
         echo "Verify      : ${VERIFY}"
         echo "Results     : ${RESULTS_EFFECTIVE}"
         echo "Locations   : ${#LOCATIONS[@]}"
@@ -441,7 +448,7 @@ collect_locations() {
         # that live OUTSIDE $HOME (e.g. /tmp, /etc/*) — paths under $HOME would
         # be redundant with the full-home scan.
         LOCATIONS+=("$HOME")
-        for loc in "${configured[@]}"; do
+        for loc in ${configured[@]+"${configured[@]}"}; do
             local expanded="${loc/#\~/$HOME}"
             if [[ "${expanded}" != "$HOME" && "${expanded}" != "$HOME"/* ]]; then
                 LOCATIONS+=("${loc}")
@@ -450,7 +457,7 @@ collect_locations() {
         return
     fi
 
-    LOCATIONS=("${configured[@]}")
+    LOCATIONS=(${configured[@]+"${configured[@]}"})
 }
 
 # ---------------------------------------------------------------------------
@@ -546,6 +553,15 @@ main() {
 
     collect_locations
 
+    # --scan-env: dump the current shell's exported env to a chmod-600 temp
+    # file and append it to the scan list. cleanup() removes it on exit.
+    if [[ "${SCAN_ENV}" == true ]]; then
+        ENV_TMP="$(mktemp /tmp/am-i-next-env.XXXXXX)"
+        chmod 600 "${ENV_TMP}"
+        env > "${ENV_TMP}"
+        LOCATIONS+=("${ENV_TMP}")
+    fi
+
     # Resolve the report path: --report wins, else REPORT_DIR/scan-<timestamp>.log
     REPORT_FILE="${REPORT_FILE:-${REPORT_DIR:-.}/scan-$(date +%Y-%m-%d-%H%M%S).log}"
     init_report
@@ -553,6 +569,7 @@ main() {
     section "Scanning options"
     ok "Verify   : ${VERIFY}"
     ok "Results  : ${RESULTS_EFFECTIVE}"
+    ok "Scan env : ${SCAN_ENV}"
     ok "Report   → ${REPORT_FILE}"
     [[ -n "${JSON_OUTPUT_FILE}" ]] && ok "Raw JSON → ${JSON_OUTPUT_FILE}"
 
