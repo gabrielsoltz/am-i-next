@@ -1,18 +1,10 @@
 {
   "schemaVersion": 1,
   "name": "am-i-next critical developer-credential locations",
-  "description": "Filesystem locations that recent supply-chain attacks (Shai-Hulud, nx s1ngularity) and AI-history harvesters (ghosttype) target on developer machines. Language-neutral so any secret scanner can consume it. Paths are ~-relative; expand ~ to the user's home directory. Non-existent paths should be skipped.",
+  "description": "Filesystem locations that recent supply-chain attacks (Shai-Hulud, nx s1ngularity) and AI-history harvesters target on developer machines. Language-neutral so any secret scanner can consume it. Paths are ~-relative; expand ~ to the user's home directory. Non-existent paths should be skipped.",
   "updated": "2026-05-23",
   "repository": "https://github.com/gabrielsoltz/am-i-next",
   "rawUrl": "https://raw.githubusercontent.com/gabrielsoltz/am-i-next/main/paths.json",
-  "sources": [
-    "https://securitylabs.datadoghq.com/articles/shai-hulud-2.0-npm-worm/",
-    "https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/",
-    "https://blog.gitguardian.com/the-nx-s1ngularity-attack-inside-the-credential-leak/",
-    "https://www.stepsecurity.io/blog/supply-chain-security-alert-popular-nx-build-system-package-compromised-with-data-stealing-malware",
-    "https://semgrep.dev/blog/2025/security-alert-nx-compromised-to-steal-wallets-and-credentials/",
-    "https://github.com/xFreed0m/ghosttype"
-  ],
   "scanLocations": {
     "common": [
       { "path": "~/.aws", "category": "cloud" },
