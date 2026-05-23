@@ -1,6 +1,6 @@
 # am-i-next
 
-**What If I'm Next?** a [TruffleHog](https://github.com/trufflesecurity/trufflehog)
+**What If I'm Next?** is a [TruffleHog](https://github.com/trufflesecurity/trufflehog)
 wrapper that scans the locations recent supply-chain attacks have been harvesting
 from developer machines, so you can see what an attacker would walk away with if
 one of those packages landed on your system.
@@ -9,11 +9,10 @@ one of those packages landed on your system.
 
 A wave of supply-chain attacks (Shai-Hulud, nx "s1ngularity", and many
 copycats) shipped credential harvesters inside popular npm/PyPI packages. Once a
-malicious `postinstall` hook ran on a developer's machine, it scanned the home
-directory for cloud keys, SSH keys, registry tokens, and crypto wallets, then
-exfiltrated them to attacker-controlled GitHub repos.
+malicious `postinstall` hook ran on your machine, it scanned the home
+directory for credentials and sent them to attackers.
 
-The harvesters are public, their target lists are documented in the writeups
+The harvesters are public; their target lists are documented in the writeups
 linked below. `am-i-next` runs TruffleHog over those same locations on **your own
 machine** so you can find and rotate exposed secrets *before* an attacker does.
 
@@ -30,12 +29,13 @@ brew install trufflehog jq        # macOS; see trufflehog docs for other OSes
 
 ```sh
 ./am-i-next.sh                       # scan using paths.json + config.conf
-./am-i-next.sh --verbose             # show each trufflehog invocation
 ./am-i-next.sh --config my.conf      # use a custom config (runtime knobs)
 ./am-i-next.sh --manifest paths.json # use a custom/fetched path manifest
+./am-i-next.sh --no-verify           # skip secrets verification this time.
 ./am-i-next.sh --full-home           # scan all of $HOME in one pass (slower)
 ./am-i-next.sh --report my-scan.log  # override the report path
 ./am-i-next.sh --json-output out.json # also save the raw trufflehog JSON stream
+./am-i-next.sh --verbose             # show each trufflehog invocation
 ```
 
 Every run writes a human-readable report to `scan-<timestamp>.log` (location set
@@ -43,20 +43,29 @@ by `REPORT_DIR` in `config.conf`, or `--report <file>`). It records what was
 scanned, any findings, and a summary. **These reports can contain real secret
 material**.
 
-By default the curated path list in `config.conf` is scanned. `--full-home`
-(or `FULL_HOME_SCAN=true` in the config) instead scans your entire home
-directory the way real harvesters do, more thorough but slower. In that mode,
-paths under `$HOME` are skipped as redundant while non-home paths
-(`/tmp`, `/etc/*`) are still scanned.
+### Secrets Verification
 
-By default only **verified** secrets are reported (`--results=verified` in
-`config.conf`). Loosen that flag to surface unverified candidates too.
+TruffleHog can "verify" whether a secret is valid by calling the issuer's API — e.g. hitting AWS STS to check whether an AWS key is actually live. This eliminates false positives, but can introduce false negatives. Each secret ends up in one of three classifications: `verified`, `unverified`, or `unknown`.
+
+`am-i-next` ships with verification **on** by default (`VERIFY=true` in `config.conf`), and only shows you results that are verified. The aim is to eliminate false positives from your results.
+
+If you want to see all the results, add `--results=verified,unverified,unknown` to `TRUFFLEHOG_EXTRA_ARGS` in `config.conf`:
+```sh
+TRUFFLEHOG_EXTRA_ARGS=(
+    "--json"
+    "--results=verified,unverified,unknown"   # your value wins; derivation is skipped
+)
+```
+
+If you don't want your secrets to be verified, you can disable that behavior:
+
+```sh
+./am-i-next.sh --no-verify    # skip verification this time
+```
 
 ## Use the path list without this tool
 
-The locations live in [`paths.json`](paths.json), a language-neutral, schema-
-versioned manifest, so you can feed the list to whatever scanner you already use.
-No API or hosting needed; fetch it straight from the repo:
+The locations this tool scans are defined in [`paths.json`](paths.json). You can use that information to scan your device with any other secret-scanning tool.
 
 ```sh
 # Grab the raw manifest
@@ -71,32 +80,42 @@ jq -r '.scanLocations.common[].path' paths.json \
 jq -r '.scanLocations.macos[] | select(.category=="browser") | .path' paths.json
 ```
 
-The manifest also carries `excludePatterns` and a `sources` list so you can see
-the provenance of every entry. `am-i-next.sh` reads this same file, so the tool
-and the published list never drift apart.
+The manifest also carries `excludePatterns` — locations and file extensions that generally don't pose a risk.
 
 ## What we scan, and why
 
 The scan locations in [`paths.json`](paths.json) are derived directly from the
-target lists published in analyses of real attacks. Categories:
+target lists published in analyses of real attacks. 
 
-| Category | Examples | Seen in |
-|----------|----------|---------|
-| Cloud credentials | `~/.aws`, `~/.azure`, `~/.config/gcloud`, AWS IMDS metadata | Shai-Hulud, s1ngularity |
-| Container / orchestration | `~/.kube`, `~/.docker`, Vault token | Shai-Hulud |
-| SSH keys | `~/.ssh`, `id_rsa` | both |
-| Registry / package tokens | `~/.npmrc`, `~/.pypirc`, `~/.gem`, `~/.cargo` | both |
-| AI CLI tool auth | `~/.claude`, `~/.gemini`, Amazon Q config | s1ngularity (weaponized Claude/Gemini/Q CLIs) |
-| AI conversation history | `~/.claude/projects/**/*.jsonl`, `~/.codex/*.sqlite`, Cursor/Windsurf `state.vscdb`, ChatGPT Desktop | AI prompts are stored locally in plaintext |
-| Crypto wallets | `~/.ethereum`, `~/.electrum`, MetaMask/Exodus/Ledger/Phantom data | both |
-| Browser profiles | Chrome/Brave/Edge/Firefox `Local Storage` + `IndexedDB` | s1ngularity |
-| `.env` / source repos | project roots, git history | both (TruffleHog used by Shai-Hulud) |
-| Shell history & startup | `~/.zsh_history`, `~/.bashrc`, `~/.zshrc` | s1ngularity |
+If instead you want to scan your full home directory, you can use `--full-home` (or `FULL_HOME_SCAN=true` in the config). In that mode, paths under `$HOME` are skipped as redundant while non-home paths
+(`/tmp`, `/etc/*`) are still scanned.
+
+Categories:
+
+| Category | Examples |
+|----------|----------|
+| Cloud credentials (`cloud`) | `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.oci` |
+| Container / orchestration (`container`) | `~/.kube`, `~/.docker`, `~/.minikube` |
+| SSH keys (`ssh`) | `~/.ssh` |
+| Git credentials (`git`) | `~/.gitconfig`, `~/.git-credentials`, `~/.config/gh` |
+| Registry / package tokens (`registry`) | `~/.npmrc`, `~/.pypirc`, `~/.gem`, `~/.cargo`, `~/.gradle`, `~/.m2`, `~/.nuget` |
+| Infrastructure-as-code (`iac`) | `~/.terraformrc`, `~/.terraform.d` |
+| Secrets managers (`secrets-manager`) | `~/.config/op` (1Password CLI), `~/.vault-token` (HashiCorp Vault) |
+| VPN / network (`vpn-network`) | `~/.netrc`, `~/.config/wireguard` |
+| AI tools — auth + chat history (`ai`) | `~/.claude` (Claude Code creds + chat logs), `~/.codex`, `~/.gemini`, `~/.codeium`, `~/.cursor`, `~/.continue`, Cursor/Windsurf `state.vscdb`, ChatGPT Desktop |
+| Crypto wallets (`crypto-wallet`) | `~/.ethereum`, `~/.electrum`, `~/.bitcoin`, Exodus/Electrum/Ledger Live/Phantom app data |
+| Browser profiles (`browser`) | Chrome / Brave / Edge / Firefox / Arc `Local Storage` + `IndexedDB` |
+| GPG / signing (`gpg`) | `~/.gnupg` |
+| Shell history (`shell-history`) | `~/.bash_history`, `~/.zsh_history`, `~/.fish/fish_history` |
+| Project roots (`project`) | `~/code`, `~/projects`, `~/dev`, `~/workspace`, `~/src` (catches `.env` files, git history) |
+| Temporary files (`temp`) | `/tmp` |
+| Broad config / data (`config-broad`, `data-broad`) | `~/.config`, `~/.local/share` |
+| IDE settings (`ide`) | VS Code, Cursor, Windsurf, JetBrains, GitHub Desktop |
+| App data / preferences (`app`, `app-prefs`, `cache`) | Slack, Homebrew cache, macOS `Library/Preferences`, snap, flatpak |
+| macOS Keychain (`keychain`) | `~/Library/Keychains` (export artifacts, not the encrypted DB itself) |
+| System files (`system`) | `/etc/environment`, `/etc/profile.d` (Linux) |
 
 ## Sources
-
-These writeups document the attacks and the exact files/locations their
-harvesters targeted, the basis for `config.conf`:
 
 **Shai-Hulud (self-replicating npm worm; used TruffleHog to harvest secrets)**
 - [Datadog Security Labs — Shai-Hulud 2.0 npm worm analysis](https://securitylabs.datadoghq.com/articles/shai-hulud-2.0-npm-worm/)
