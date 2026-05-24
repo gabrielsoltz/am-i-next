@@ -24,6 +24,10 @@ FULL_HOME_CLI=""   # tri-state: empty = use config default, true/false = overrid
 VERIFY_CLI=""      # tri-state: empty = use config default, true/false = override
 SCAN_ENV=false     # --scan-env: dump current shell's env vars to a temp file
 ENV_TMP=""         # populated at scan time so cleanup() can remove it
+NOTIFY=false       # --notify: fire OS notification after the scan
+NO_BANNER=false    # --no-banner: suppress ASCII banner (for headless runs)
+REPORT_DIR_CLI=""  # --report-dir: override REPORT_DIR for one run
+RETAIN_CLI=""      # --retain N: prune REPORT_DIR keeping N newest reports
 
 FINDINGS=0
 SCANNED=0
@@ -104,6 +108,15 @@ Options:
                        (verification is on by default; see README)
   --scan-env           Also scan the current shell's environment variables
                        (dumped to a chmod-600 temp file, removed on exit)
+  --notify             Fire an OS desktop notification with finding counts
+                       after the scan (osascript / notify-send; silent skip
+                       if neither is available). Count-only payload.
+  --no-banner          Suppress the ASCII banner — useful for headless / log
+                       output from scheduled runs.
+  --report-dir <dir>   Override REPORT_DIR for this run (the report file goes
+                       into <dir>/scan-<timestamp>.log).
+  --retain <N>         After the scan, prune <report-dir> keeping the N most
+                       recent scan-*.log files (and update latest.log symlink).
   --verbose            Show each trufflehog invocation
   --help               Show this help
 
@@ -124,6 +137,10 @@ parse_args() {
             --full-home)    FULL_HOME_CLI=true; shift ;;
             --no-verify)    VERIFY_CLI=false; shift ;;
             --scan-env)     SCAN_ENV=true; shift ;;
+            --notify)       NOTIFY=true; shift ;;
+            --no-banner)    NO_BANNER=true; shift ;;
+            --report-dir)   REPORT_DIR_CLI="$2"; shift 2 ;;
+            --retain)       RETAIN_CLI="$2"; shift 2 ;;
             --verbose)      VERBOSE=true; shift ;;
             --help|-h)      usage; exit 0 ;;
             *) die "Unknown option: $1. Run with --help for usage." ;;
@@ -192,10 +209,10 @@ check_deps() {
         case "${OS_TYPE}" in
             macos)
                 echo "    brew install trufflehog"
-                echo "    or: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin"
+                echo "    or: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -v -b /usr/local/bin"
                 ;;
             linux)
-                echo "    curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin"
+                echo "    curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -v -b /usr/local/bin"
                 echo "    or: snap install trufflehog (if available)"
                 ;;
             *)
@@ -401,6 +418,62 @@ findings_plain() {
 }
 
 # ---------------------------------------------------------------------------
+# Notification (count-only, silent if no native tool present)
+# ---------------------------------------------------------------------------
+
+notify_findings() {
+    local title="am-i-next"
+    local msg
+    if [[ "${FINDINGS}" -gt 0 ]]; then
+        msg="${FINDINGS} finding(s)"
+        [[ "${ERRORS}" -gt 0 ]] && msg+=", ${ERRORS} scan error(s)"
+        msg+=" — see ${REPORT_FILE}"
+    elif [[ "${ERRORS}" -gt 0 ]]; then
+        msg="Scan completed with ${ERRORS} error(s) — see ${REPORT_FILE}"
+    else
+        msg="Scan complete — no findings."
+    fi
+
+    case "${OS_TYPE}" in
+        macos)
+            command -v osascript &>/dev/null && \
+                osascript -e "display notification \"${msg}\" with title \"${title}\"" 2>/dev/null || true
+            ;;
+        linux)
+            command -v notify-send &>/dev/null && \
+                notify-send "${title}" "${msg}" 2>/dev/null || true
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Update latest.log symlink + prune to RETAIN_CLI most recent reports
+# ---------------------------------------------------------------------------
+
+rotate_reports() {
+    local dir
+    dir="$(dirname "${REPORT_FILE}")"
+    # Update latest.log → newest scan-*.log in this dir
+    ln -sf "$(basename "${REPORT_FILE}")" "${dir}/latest.log" 2>/dev/null || true
+
+    [[ -z "${RETAIN_CLI}" ]] && return
+    [[ ! "${RETAIN_CLI}" =~ ^[0-9]+$ ]] && { warn "--retain expects an integer; skipping prune"; return; }
+
+    # List scan-*.log oldest first, drop the last N (newest)
+    local files=()
+    while IFS= read -r f; do
+        files+=("$f")
+    done < <(ls -1t "${dir}"/scan-*.log 2>/dev/null)
+
+    if [[ "${#files[@]}" -gt "${RETAIN_CLI}" ]]; then
+        local i
+        for (( i=RETAIN_CLI; i<${#files[@]}; i++ )); do
+            rm -f "${files[$i]}"
+        done
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Initialize the report file with a header
 # ---------------------------------------------------------------------------
 
@@ -509,6 +582,10 @@ print_summary() {
     } >> "${REPORT_FILE}"
 
     ok "Report saved → ${REPORT_FILE}"
+
+    rotate_reports
+    [[ "${NOTIFY}" == true ]] && notify_findings
+
     echo ""
 }
 
@@ -517,13 +594,20 @@ print_summary() {
 # ---------------------------------------------------------------------------
 
 main() {
-    banner
     parse_args "$@"
+    [[ "${NO_BANNER}" == true ]] || banner
     load_config
     detect_os
     check_deps
     # --manifest wins over the config/default path.
     [[ -n "${MANIFEST_CLI}" ]] && MANIFEST_FILE="${MANIFEST_CLI}"
+    # --report-dir wins over the config/default REPORT_DIR.
+    [[ -n "${REPORT_DIR_CLI}" ]] && REPORT_DIR="${REPORT_DIR_CLI}"
+    # --scan-env is a foot-gun in headless contexts (env would be the
+    # scheduler's, not the user's). Refuse rather than silently mislead.
+    if [[ "${SCAN_ENV}" == true && ! -t 1 ]]; then
+        die "--scan-env requires a TTY (the env in a scheduled context is not your interactive shell's)."
+    fi
     load_manifest
     build_exclude_file
 
