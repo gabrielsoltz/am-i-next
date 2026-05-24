@@ -83,6 +83,49 @@ This dumps `env` to a `chmod 600` temp file under `/tmp`, scans it, and removes
 it on exit. It only sees what's exported in the shell you ran the command from
 — it won't reach other shells, other users, or other processes' environments.
 
+### Scheduled scans
+
+The interactive `./am-i-next.sh` is the primary way to run a scan, but for an
+always-on backstop you can install a per-user scheduled scan via
+[`install-schedule.sh`](install-schedule.sh):
+
+```sh
+./install-schedule.sh install                                # daily at 03:17 local
+./install-schedule.sh install --frequency weekly --time 04:30
+./install-schedule.sh status                                  # see next run + last reports
+./install-schedule.sh uninstall                               # remove the schedule
+```
+
+What it does:
+
+- Writes a per-user **launchd plist** on macOS (`~/Library/LaunchAgents/com.gabrielsoltz.am-i-next.plist`)
+  or a per-user **systemd timer + service** on Linux (`~/.config/systemd/user/am-i-next.{timer,service}`).
+- Both handle sleep/wake — a missed daily run fires on next wake (launchd) /
+  next boot (`Persistent=true` on systemd).
+- Reports land in an OS-native, non-synced directory (`chmod 700`):
+  - macOS: `~/Library/Application Support/am-i-next/`
+  - Linux: `~/.local/state/am-i-next/`
+- After each run, `latest.log` symlinks to the newest report and reports older
+  than `--retain N` (default 30) are pruned.
+- A **desktop notification** fires after every run (findings or clean) with a
+  **count-only payload** — no detector names, no values, no leakage via
+  Notification Center / lock-screen previews. If the scheduled run itself fails
+  (missing dependency, manifest error, etc.), a separate **"Scheduled scan
+  failed"** notification fires with the exit code and a pointer to the stderr
+  log (`launchd.stderr.log` on macOS, `journalctl --user -u am-i-next.service`
+  on Linux).
+
+The scheduled invocation passes `--no-banner --notify --report-dir ... --retain ...`.
+Verification stays on, `--scan-env` is intentionally refused in headless
+contexts (the scheduled environment isn't your interactive shell's).
+
+The installer refuses to run as root, refuses to overwrite an existing unit
+without `--force`, and warns if your chosen report directory lives inside
+iCloud / Dropbox / OneDrive / Google Drive. It also refuses to install if
+`trufflehog` or `jq` aren't reachable from your interactive shell — and bakes
+the directories holding them into the unit's `PATH`, so the scheduled run
+can find Homebrew binaries (which aren't on launchd/systemd's default `PATH`).
+
 ## Use the path list without this tool
 
 The locations this tool scans are defined in [`paths.json`](paths.json). You can use that information to scan your device with any other secret-scanning tool.

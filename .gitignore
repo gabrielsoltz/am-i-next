@@ -2,6 +2,9 @@
 scan-*.log
 *.scan.json
 
+# am-i-next custom paths
+*.paths.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
