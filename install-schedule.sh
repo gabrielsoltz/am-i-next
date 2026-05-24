@@ -244,7 +244,9 @@ Description=am-i-next scheduled credential exposure scan
 [Service]
 Type=oneshot
 Environment=PATH=${UNIT_PATH_ENV}
-ExecStart=/bin/bash -c '"\$1" --report-dir "\$2" --retain "\$3" --notify --no-banner; rc=\$?; if [ "\$rc" -ne 0 ]; then command -v notify-send >/dev/null && notify-send "am-i-next" "Scheduled scan failed (exit \$rc). See: journalctl --user -u am-i-next.service"; fi; exit \$rc' am-i-next-runner ${AM_I_NEXT} ${REPORT_DIR} ${RETAIN}
+StandardOutput=append:${REPORT_DIR}/systemd.stdout.log
+StandardError=append:${REPORT_DIR}/systemd.stderr.log
+ExecStart=/bin/bash -c '"\$1" --report-dir "\$2" --retain "\$3" --notify --no-banner; rc=\$?; if [ "\$rc" -ne 0 ]; then command -v notify-send >/dev/null && notify-send "am-i-next" "Scheduled scan failed (exit \$rc). See \$2/systemd.stderr.log"; fi; exit \$rc' am-i-next-runner ${AM_I_NEXT} ${REPORT_DIR} ${RETAIN}
 EOF
 
     cat > "${TIMER_PATH}" <<EOF
@@ -297,7 +299,7 @@ cmd_install() {
     case "${OS_TYPE}" in
         macos)
             if [[ -e "${UNIT_PATH}" && "${FORCE}" != true ]]; then
-                die "${UNIT_PATH} already exists. Use --force to overwrite."
+                die "${UNIT_PATH} already exists. Run '$(basename "$0") uninstall' first, or pass --force to overwrite in place."
             fi
             mkdir -p "$(dirname "${UNIT_PATH}")"
             write_plist_macos
@@ -307,7 +309,7 @@ cmd_install() {
             ;;
         linux)
             if [[ ( -e "${SERVICE_PATH}" || -e "${TIMER_PATH}" ) && "${FORCE}" != true ]]; then
-                die "Existing service/timer in ${SYSTEMD_DIR}. Use --force to overwrite."
+                die "Existing service/timer in ${SYSTEMD_DIR}. Run '$(basename "$0") uninstall' first, or pass --force to overwrite in place."
             fi
             mkdir -p "${SYSTEMD_DIR}"
             write_units_linux
